@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Forecast with Gemini Chatbot</title>
+    <link rel="stylesheet" href="tables.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script type="importmap">
+        {
+          "imports": {
+            "@google/generative-ai": "https://esm.run/@google/generative-ai"
+          }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-item">
+                <img src="logo.png" alt="logo">
+            </div>
+            <div class="sidebar-item">
+                <a href="dashboard.html">
+                    <img src="dashboard icon.png" alt="Dashboard Icon">
+                    <span class="sidebar-text">Dashboard</span>
+                </a>
+            </div>
+            <div class="sidebar-item">
+                <a href="tables.html">
+                    <img src="tables icon.png" alt="Tables Icon">
+                    <span class="sidebar-text">Tables</span>
+                </a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="user-profile">
+                <img src="pfp.jpg" alt="User Profile">
+            </div>
+
+            <div class="search">
+                <input type="text" id="search-bar" placeholder="Enter city name">
+                <button id="search-btn">Get Weather</button>
+            </div>
+
+            <div class="table-section">
+                <h3>5-Day Weather Forecast</h3>
+                <table id="weather-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Temperature (°C)</th>
+                            <th>Weather</th>
+                        </tr>
+                    </thead>
+                    <tbody id="weather-table-body"></tbody>
+                </table>
+
+                <div class="pagination">
+                    <button id="prev-btn" disabled>Previous</button>
+                    <span id="page-info"></span>
+                    <button id="next-btn">Next</button>
+                </div>
+            </div>
+
+            <div class="chatbot-container">
+                <div class="chatbox">
+                    <div class="answer-area" id="chat-output"></div>
+                    <div class="chat-bar">
+                        <input type="text" id="chat-input" placeholder="Ask something (e.g., 'What's the weather in Islamabad?')...">
+                        <button id="chat-send-btn">Send</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+
+        const weatherApiKey = 'ae052604820ce54ac992fbf69c21679e';  // Your OpenWeatherMap API key
+        const geminiApiKey = 'AIzaSyBkBYaPk9aLRG648wKt7rHDMM3bUuUZSoM';  // Replace with your Gemini API Key
+        const entriesPerPage = 10;
+        let currentPage = 1;
+        let totalEntries = 0;
+        let forecastData = [];
+
+        // Initialize Gemini API
+        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        // Fetch Weather Forecast Data
+        function getForecastData(city) {
+            const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${weatherApiKey}&units=metric`;
+
+            fetch(forecastUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`City not found: ${city}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.cod === "200") {
+                        forecastData = data.list;
+                        totalEntries = forecastData.length;
+                        currentPage = 1;
+                        displayTableData();
+                        updatePaginationControls();
+                    } else {
+                        alert("Error fetching forecast data.");
+                    }
+                })
+                .catch(error => alert(error.message));
+        }
+
+        // Handle Weather Query
+        document.getElementById('search-btn').addEventListener('click', function() {
+            const cityName = document.getElementById('search-bar').value.trim();
+            if (cityName) {
+                getForecastData(cityName);
+            } else {
+                alert("Please enter a city name.");
+            }
+        });
+
+        // Chatbot Functionality
+        document.getElementById('chat-send-btn').addEventListener('click', async function() {
+            const userMessage = document.getElementById('chat-input').value.trim();
+            if (userMessage) {
+                addChatMessage('User', userMessage);
+                await handleChatbotResponse(userMessage);
+                document.getElementById('chat-input').value = '';
+            }
+        });
+
+        // Add chat message to output area
+        function addChatMessage(sender, message) {
+            const chatOutput = document.getElementById('chat-output');
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = `${sender}: ${message}`;
+            chatOutput.appendChild(messageDiv);
+        }
+
+        // Detect if it's a weather query or non-weather query
+        async function handleChatbotResponse(message) {
+            const lowerCaseMessage = message.toLowerCase().trim();
+
+            if (lowerCaseMessage.includes('weather') || lowerCaseMessage.includes('temperature')) {
+                const cityMatch = lowerCaseMessage.match(/in (.+)/);
+                if (cityMatch) {
+                    const cityName = cityMatch[1].trim();
+                    await getWeather(cityName);
+                } else {
+                    addChatMessage('Chatbot', "Please specify a city.");
+                }
+            } else {
+                await fetchGeminiResponse(message);
+            }
+        }
+
+        // Fetch Gemini API Response
+        async function fetchGeminiResponse(userMessage) {
+            try {
+                const result = await model.generateContent(userMessage);
+                const chatbotResponse = result.response.text();
+                addChatMessage('Chatbot', chatbotResponse);
+            } catch (error) {
+                addChatMessage('Chatbot', `Error fetching response: ${error.message}`);
+            }
+        }
+
+        // Fetch Weather for a City
+        async function getWeather(cityName) {
+            const endpoint = `https://api.openweathermap.org/data/2.5/weather?q=${cityName}&appid=${weatherApiKey}&units=metric`;
+
+            try {
+                const response = await fetch(endpoint);
+                if (!response.ok) {
+                    throw new Error(`Couldn't fetch the weather for ${cityName}. Please check the name.`);
+                }
+                const data = await response.json();
+                if (data && data.main) {
+                    const temp = data.main.temp;
+                    const description = data.weather[0].description;
+                    addChatMessage('Chatbot', `The current temperature in ${cityName} is ${temp}°C with ${description}.`);
+                } else {
+                    addChatMessage('Chatbot', `I couldn't find the weather for ${cityName}.`);
+                }
+            } catch (error) {
+                addChatMessage('Chatbot', error.message);
+            }
+        }
+    </script>
+</body>
+</html>
