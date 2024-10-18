@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-item">
+                <img src="logo.png" alt="Weather App Logo">
+            </div>
+            <div class="sidebar-item">
+                <a href="dashboard.html">
+                    <img src="dashboard icon.png" alt="Dashboard Icon">
+                    <span class="sidebar-text">Dashboard</span>
+                </a>
+            </div>
+            <div class="sidebar-item">
+                <a href="tables.html">
+                    <img src="tables icon.png" alt="Tables Icon">
+                    <span class="sidebar-text">Tables</span>
+                </a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="user-profile">
+                <img src="pfp.jpg" alt="User Profile">
+            </div>
+
+            <div class="search">
+                <input type="text" id="search-bar" placeholder="Enter city name">
+                <button id="search-btn">Get Weather</button>
+            </div>
+
+            <div class="weather-widget" id="weatherWidget">
+                <h3>Weather in <span id="city-name">City</span></h3>
+                <p id="weather-description">Description: Clear Sky</p>
+                <p id="temperature">Temperature: 0°C</p>
+                <p id="humidity">Humidity: 0%</p>
+            </div>
+
+            <div class="charts">
+                <div class="vertical-bar-chart">
+                    <canvas id="barChart"></canvas>
+                </div>
+                <div class="donut-chart">
+                    <canvas id="donutChart"></canvas>
+                </div>
+                <div class="line-chart">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+
+            <script>
+                const apiKey = 'ae052604820ce54ac992fbf69c21679e';
+                let barChartInstance, donutChartInstance, lineChartInstance;
+                let forecastData = [];
+                let currentPage = 1;
+                const entriesPerPage = 10;
+
+                document.getElementById('search-btn').addEventListener('click', function() {
+                    const city = document.getElementById('search-bar').value;
+                    if (city) {
+                        getWeatherData(city);
+                    }
+                });
+
+                function getWeatherData(city) {
+                    const weatherUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric`;
+                    fetch(weatherUrl)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.cod === "200") {
+                                displayWeatherData(data);
+                                processForecastData(data);
+                            } else {
+                                alert("City not found");
+                            }
+                        })
+                        .catch(error => console.error('Error fetching weather data:', error));
+                }
+
+                function displayWeatherData(data) {
+                    const cityName = data.city.name;
+                    const weatherCondition = data.list[0].weather[0].main;
+                    const temp = data.list[0].main.temp;
+                    const humidity = data.list[0].main.humidity;
+
+                    document.getElementById('city-name').textContent = cityName;
+                    document.getElementById('weather-description').textContent = `Description: ${weatherCondition}`;
+                    document.getElementById('temperature').textContent = `Temperature: ${temp}°C`;
+                    document.getElementById('humidity').textContent = `Humidity: ${humidity}%`;
+
+                    const widget = document.getElementById('weatherWidget');
+                    if (weatherCondition.includes("Clouds")) {
+                        widget.style.background = "url('cloudy.jpg')";
+                    } else if (weatherCondition.includes("Rain")) {
+                        widget.style.background = "url('rainy.png')";
+                    } else if (weatherCondition.includes("Clear")) {
+                        widget.style.background = "url('clear.jpg')";
+                    } else {
+                        widget.style.background = "url('default.jpg')";
+                    }
+                    widget.style.backgroundSize = 'cover';
+                    widget.style.backgroundPosition = 'center';
+                }
+
+                function processForecastData(data) {
+                    const temps = [];
+                    const labels = [];
+                    const weatherConditions = {};
+
+                    forecastData = data.list.filter((item, index) => index % 8 === 0);
+                    forecastData.forEach(item => {
+                        const date = new Date(item.dt_txt).toLocaleDateString();
+                        labels.push(date);
+                        temps.push(item.main.temp);
+
+                        const condition = item.weather[0].main;
+                        weatherConditions[condition] = (weatherConditions[condition] || 0) + 1;
+                    });
+
+                    renderCharts(temps, labels, weatherConditions);
+                }
+
+                function destroyPreviousCharts() {
+                    if (barChartInstance) {
+                        barChartInstance.destroy();
+                    }
+                    if (donutChartInstance) {
+                        donutChartInstance.destroy();
+                    }
+                    if (lineChartInstance) {
+                        lineChartInstance.destroy();
+                    }
+                }
+
+                function renderCharts(temps, labels, weatherConditions) {
+                    destroyPreviousCharts();
+
+                    const ctxBar = document.getElementById('barChart').getContext('2d');
+                    barChartInstance = new Chart(ctxBar, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Temperature (°C)',
+                                data: temps,
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            animation: { delay: 500 },
+                            scales: { y: { beginAtZero: true } }
+                        }
+                    });
+
+                    const ctxDonut = document.getElementById('donutChart').getContext('2d');
+                    donutChartInstance = new Chart(ctxDonut, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(weatherConditions),
+                            datasets: [{
+                                label: 'Weather Conditions',
+                                data: Object.values(weatherConditions),
+                                backgroundColor: [
+                                    'rgba(255, 99, 132, 0.2)',
+                                    'rgba(54, 162, 235, 0.2)',
+                                    'rgba(255, 206, 86, 0.2)',
+                                    'rgba(75, 192, 192, 0.2)'
+                                ],
+                                borderColor: [
+                                    'rgba(255, 99, 132, 1)',
+                                    'rgba(54, 162, 235, 1)',
+                                    'rgba(255, 206, 86, 1)',
+                                    'rgba(75, 192, 192, 1)'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            animation: { delay: 500 }
+                        }
+                    });
+
+                    const ctxLine = document.getElementById('lineChart').getContext('2d');
+                    lineChartInstance = new Chart(ctxLine, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Temperature (°C)',
+                                data: temps,
+                                fill: false,
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                tension: 0.1
+                            }]
+                        },
+                        options: {
+                            animation: { duration: 1500, easing: 'easeOutBounce' },
+                            scales: { y: { beginAtZero: true } }
+                        }
+                    });
+                }
+
+                function displayTableData() {
+                    const tbody = document.getElementById('forecast-table-body');
+                    tbody.innerHTML = '';
+
+                    const startIndex = (currentPage - 1) * entriesPerPage;
+                    const endIndex = startIndex + entriesPerPage;
+                    const paginatedData = forecastData.slice(startIndex, endIndex);
+
+                    paginatedData.forEach(item => {
+                        const row = `<tr>
+                            <td>${new Date(item.dt_txt).toLocaleDateString()}</td>
+                            <td>${item.main.temp}°C</td>
+                            <td>${item.weather[0].description}</td>
+                        </tr>`;
+                        tbody.innerHTML += row;
+                    });
+
+                    document.getElementById('page-info').textContent = `Page ${currentPage} of ${Math.ceil(forecastData.length / entriesPerPage)}`;
+                    document.getElementById('prev-btn').disabled = currentPage === 1;
+                    document.getElementById('next-btn').disabled = endIndex >= forecastData.length;
+                }
+
+                document.getElementById('prev-btn').addEventListener('click', () => {
+                    if (currentPage > 1) {
+                        currentPage--;
+                        displayTableData();
+                    }
+                });
+
+                document.getElementById('next-btn').addEventListener('click', () => {
+                    if (currentPage * entriesPerPage < forecastData.length) {
+                        currentPage++;
+                        displayTableData();
+                    }
+                });
+            </script>
+        </main>
+    </div>
+</body>
+</html>
